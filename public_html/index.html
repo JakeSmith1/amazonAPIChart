@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html>
+  <head>
+      <meta charset="utf-8">
+      <title>Quantum Networks Product Page</title>
+      <!-- load bootrap css -->
+      <link href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+  </head>
+  <body>
+      <!-- Column to display data from MySQL database -->
+      <div class="col-lg-6">
+          <table class="table table-bordered table-striped">
+              <thead>
+                  <tr>
+                      <th>Name</th>
+                      <th>ASIN</th>
+                      <th>MPN</th>
+                      <th>Price</th>
+                </tr>
+              </thead>
+              <tbody id="table-body">
+
+              </tbody>
+          </table>
+      </div>
+      <!-- Column to serach, display searched data from amazon, and save data to the mysql database -->
+      <div class="col-lg-6">
+          <div class="row input">
+                  <form class="form-inline" id="amazon-form" >
+                      <div class="form-group">
+                          <label for="name">Enter Product ASIN</label>
+                          <input type="text" name="ASIN" class="form-control" id="input-val" placeholder="...">
+                      </div>
+                      <button type="submit" class="btn btn-primary">Search</button>
+                  </form>
+          </div>
+          <div class="row response-hide">
+                  <div class="thumbnail">
+                        <p>Name: <span id="product-Name"></span></p>
+                        <p>MPN: <span id="product-MPN"></span></p>
+                        <p>ASIN: <span id="product-ASIN"></span></p>
+                        <p>Price: <span id="product-Price"></span></p>
+                        <p><a href="#" id="save-product" class="btn btn-primary disabled" role="button">Save</a></p>
+                  </div>
+          </div>
+      </div>
+      <!-- load bootstrap js and jquery (bootstrap js dependency) -->
+      <script src="https://code.jquery.com/jquery-3.1.1.min.js" integrity="sha256-hVVnYaiADRTO2PzUGmuLJr8BLUSjGIZsDYGmIJLv2b8=" crossorigin="anonymous"></script>
+      <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
+      <script>
+      (function() {
+        //retrieve mysql data when pages loads
+        window.addEventListener('load', function() {
+          httpGetAsync("../resources/dbHandler.php?products", function(response) {
+            var json = JSON.parse(response);
+            json.forEach(function(product) {
+              addRow(product)
+            })
+          })
+        })
+        //add event listener for form submission for searching product
+        document.getElementById("amazon-form")
+        .addEventListener("submit", function(event) {
+          event.preventDefault();
+          var searchVal = document.getElementById("input-val").value;
+          if(!searchVal.length) {
+            alert('Please enter an ASIN');
+            return;
+          }
+          httpGetAsync("../resources/searchHandler.php" + "?ASIN=" + searchVal, function(res){
+            var result = JSON.parse(res);
+            if(result.error) {
+              console.error(result.error[0]);
+              alert(result.error[0]);
+              return;
+            }
+            var formattedResult = searchedValues("set", result);
+            document.getElementById("save-product").className = 'btn btn-primary';
+            showSearchResults(formattedResult);
+          })
+        })
+        //thumbnail event listener for saving product to database
+        document.getElementById("save-product")
+        .addEventListener("click", function(event) {
+          event.preventDefault();
+          document.getElementById("save-product").className = 'btn btn-primary disabled';
+          var json = searchedValues("get json");
+          httpPOSTAsync("../resources/dbHandler.php", json, function(res){
+            //HAVE THE SAVING RETURN THE INSERTED ROW
+            if(res === 'row inserted') {
+              addRow(data);
+            }
+            clearForms();
+          })
+        })
+
+
+        //function to make async GET request
+        function httpGetAsync(url, callback) {
+          var xmlHttp = new XMLHttpRequest();
+          xmlHttp.onreadystatechange = function() {
+            if(xmlHttp.readyState == 4 && xmlHttp.status == 200) {
+              callback(xmlHttp.responseText);
+            }
+          }
+          xmlHttp.open("GET", url, true); // true for asynchronous
+          xmlHttp.send();
+        }
+        //function to make async POST request with json
+        function httpPOSTAsync(url, json, callback) {
+          var xmlHttp = new XMLHttpRequest();
+          xmlHttp.onreadystatechange = function() {
+            if(xmlHttp.readyState == 4 && xmlHttp.status == 200) {
+              callback(xmlHttp.responseText);
+            }
+          }
+          xmlHttp.open("POST", url, true); // true for asynchronous
+          xmlHttp.setRequestHeader('Content-Type', 'application/json');
+          xmlHttp.send(json);
+        }
+
+
+        //function to display the results in the thumbnail
+        function showSearchResults(data) {
+          document.getElementById("product-ASIN").innerHTML = data.ASIN;
+          document.getElementById("product-Price").innerHTML = data.Price;
+          document.getElementById("product-Name").innerHTML = data.Name;
+          document.getElementById("product-MPN").innerHTML = data.MPN;
+        }
+        //get and set productData to be able to add searched products to the table after they are successfully added to the db
+        var data = {};
+        function searchedValues(option, productData) {
+          if(option === "get") {
+            return data;
+          }
+          if(option === "get json") {
+            return JSON.stringify(data);
+          }
+          if(option === "set") {
+            data.ASIN = productData.ASIN[0];
+            data.Price = productData.Price[0];
+            data.Name = productData.Name[0];
+            data.MPN = productData.MPN[0];
+            return data;
+          }
+          return "no option specified";
+        }
+        function addRow(product) {
+          var table = document.getElementById("table-body");
+          //prepend the row (remove the 0 to append the row)
+          var row = table.insertRow(0);
+
+          // Insert new cells (<td> elements) at the 1st and 2nd position of the "new" <tr> element:
+          var cell1 = row.insertCell().innerHTML = product.Name;
+          var cell2 = row.insertCell().innerHTML = product.ASIN;
+          var cell3 = row.insertCell().innerHTML = product.MPN;
+          var cell4 = row.insertCell().innerHTML = product.Price;
+        }
+        function clearForms() {
+          var spans = document.getElementsByTagName('span');
+          for(var i = 0; i < 4; i += 1) {
+            spans[i].innerHTML = "";
+          }
+          document.getElementById('input-val').value = "";
+          // [...spans].forEach(function(span) {
+          //   span.innerHTML = "";
+          // })
+        }
+      })()
+      </script>
+      <style>
+        div.input {
+          margin-bottom: 12px;
+        }
+        div.col-lg-6 {
+          margin-top: 10px;
+        }
+        div.thumbnail p {
+          padding: 6px;
+        }
+        div.input {
+          text-align: center;
+        }
+        div.input + div {
+          text-align: left;
+        }
+        .form-group > label {
+          margin-right: 6px;
+        }
+      </style>
+  </body>
+</html>
